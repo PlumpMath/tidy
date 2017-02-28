@@ -17,7 +17,7 @@
         (dotimes [i n]
           (async/>! from i)))
 
-      ;; consume message from to channel
+      ;; consume messages from to channel (every 1000ms)
       (dotimes [i n]
         (println (async/<!! to)))
 
