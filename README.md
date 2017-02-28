@@ -1,6 +1,6 @@
 # tomthought/tidy
 
-[![Current Version](https://img.shields.io/clojars/v/tidy.svg)](https://clojars.org/tidy)
+[![Current Version](https://img.shields.io/clojars/v/tomthought/tidy.svg)](https://clojars.org/tomthought/tidy)
 [![Circle CI](https://circleci.com/gh/tomthought/tidy.svg?style=shield)](https://circleci.com/gh/tomthought/tidy)
 [![Dependencies Status](https://jarkeeper.com/tomthought/tidy/status.svg)](https://jarkeeper.com/tomthought/tidy)
 
