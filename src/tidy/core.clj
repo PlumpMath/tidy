@@ -15,17 +15,17 @@
   't' ms from the last hand off."
   ([from to] (interval-pipe from to default-interval-ms))
   ([from to t]
+   (assert (pos? t))
    (async/go
-     (loop [last-hand-off-ms (t/now)
-            q []]
-       (let [t* (- (+ (tc/to-long last-hand-off-ms) t) (tc/to-long (t/now)))
-             [v ch] (async/alts! [(async/timeout t*) from])]
-         (if-not (= ch from)
-           (if-let [v (first q)]
-             (do (async/>! to v)
-                 (recur (t/now) (vec (rest q))))
-             (recur (t/now) q))
-           (when v (recur last-hand-off-ms (conj q v)))))))))
+     (try (loop [last-hand-off-ms (t/minus (t/now) (t/millis t))]
+            (when-let [v (async/<! from)]
+              (let [t* (- (+ (tc/to-long last-hand-off-ms) t)
+                          (tc/to-long (t/now)))]
+                (async/<! (async/timeout t*))
+                (async/>! to v)
+                (recur (t/now)))))
+          (catch Exception e
+            (println e))))))
 
 (defn interval-pub
   "Works the same as a core.async 'pub', with the added functionality that no
