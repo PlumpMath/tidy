@@ -13,7 +13,7 @@ Concurrency patterns using Clojure core.async.
 ;; examples taken from dev/dev.clj
 
 (:require [tidy.core :as tidy]
-            [clojure.core.async :as async])
+          [clojure.core.async :as async])
 
 ;; test an interval-pipe
 
