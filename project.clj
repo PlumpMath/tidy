@@ -1,4 +1,4 @@
-(defproject tidy "0.1.0"
+(defproject tidy "0.1.1"
   :description "Concurrency patterns using Clojure core.async."
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
