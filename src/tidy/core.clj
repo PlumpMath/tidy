@@ -78,8 +78,8 @@
 (defn feeder-pipe
   "Move messages from 'from' to 'to', subject to being grouped by function 'f'.
   Messages will be placed into a queue with messages that produce the same
-  result from 'f'. The queues will then be read, one at a time, out of order,
-  and the items will be placed onto the 'to' channel in this order."
+  result from 'f'. The queues will then be read, one at a time,
+  non-deterministically and the items will be placed onto the 'to' channel."
   ([from to f] (feeder-pipe from to f 32))
   ([from to f buf-size]
    (let [channels (atom {})]
