@@ -17,15 +17,14 @@
   ([from to t]
    (assert (pos? t))
    (async/go
-     (try (loop [last-hand-off-ms (t/minus (t/now) (t/millis t))]
-            (when-let [v (async/<! from)]
-              (let [t* (- (+ (tc/to-long last-hand-off-ms) t)
-                          (tc/to-long (t/now)))]
-                (async/<! (async/timeout t*))
-                (async/>! to v)
-                (recur (t/now)))))
-          (catch Exception e
-            (println e))))))
+     (loop [last-hand-off-ms (t/minus (t/now) (t/millis t))]
+       (when-let [v (async/<! from)]
+         (let [t* (- (+ (tc/to-long last-hand-off-ms) t)
+                     (tc/to-long (t/now)))]
+           (async/<! (async/timeout t*))
+           (async/>! to v)
+           (recur (t/now)))))
+     (async/close! to))))
 
 (defn interval-pub
   "Works the same as a core.async 'pub', with the added functionality that no
@@ -75,5 +74,49 @@
        (async/close! inner-pub-ch))
 
      p*)))
+
+(defn feeder-pipe
+  "Move messages from 'from' to 'to', subject to being grouped by function 'f'.
+  Messages will be placed into a queue with messages that produce the same
+  result from 'f'. The queues will then be read, one at a time, out of order,
+  and the items will be placed onto the 'to' channel in this order."
+  ([from to f] (feeder-pipe from to f 32))
+  ([from to f buf-size]
+   (let [channels (atom {})]
+     (async/go
+       (loop []
+         (let [channel-seq (not-empty (vals @channels))
+               [v ch] (async/alts! (vec (cons from channel-seq)))]
+
+           (when v
+             (if (= ch from)
+
+               ;; new value, into appropriate silo
+               (let [k (f v)]
+                 (swap! channels
+                        (fn [channels]
+                          (let [ch (or (get channels k) (async/chan buf-size))]
+                            (async/put! ch v)
+                            (assoc channels k ch)))))
+
+               ;; drain the top layer of all channels
+               (do (async/>! to v)
+                   (loop [channel-seq (remove (partial = ch) channel-seq)]
+                     (when (not-empty channel-seq)
+                       (let [[v ch] (async/alts!
+                                     (vec (cons
+                                           (async/timeout 50)
+                                           channel-seq)))]
+                         (if (and v ch)
+                           (do
+                             (async/>! to v)
+                             (recur (remove (partial = ch) channel-seq)))
+                           (swap! channels
+                                  (fn [channels]
+                                    (->> channels
+                                         (remove (comp (set channel-seq) second))
+                                         (into {}))))))))))
+             (recur))))
+       (async/close! to)))))
 
 ;;; Private

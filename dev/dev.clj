@@ -81,3 +81,35 @@
              (recur)))))
 
       (println "test complete."))))
+
+(defn feeder-pipe-test
+  []
+
+  (async/thread
+    (let [n 10
+          from (async/chan)
+          to (async/chan)
+
+          c (atom 0)]
+
+      ;; create an interval pipe with interval of 1s
+      (tidy/feeder-pipe from to first)
+
+      ;; dump messages onto from channel
+      (dotimes [i n]
+        (async/put! from [i i]))
+
+      (dotimes [_ 2]
+        (async/go
+
+          (loop []
+            (when-let [v (async/<! to)]
+              (println v)
+              (async/<! (async/timeout 1000))
+              (when (= n (swap! c inc))
+                (async/close! from)
+                (async/close! to)
+                (println "test complete."))
+              (recur)))))
+
+      )))
