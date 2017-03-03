@@ -80,45 +80,41 @@
   Messages will be placed into a queue with messages that produce the same
   result from 'f'. The queues will then be read, one at a time,
   non-deterministically and the items will be placed onto the 'to' channel."
-  ([from to f] (feeder-pipe from to f 32))
+  ([from to f] (feeder-pipe from to f 1024))
   ([from to f buf-size]
-   (let [channels (atom {})]
+   (let [silos (atom {})
+         stop-ch (async/chan)]
 
+     ;; place items from 'from' channel onto the corresponding silo.
      (async/go
-       (loop [channel-seq (vals @channels)]
-         (let [[v ch] (async/alts! (vec (concat [from (async/timeout 25)] channel-seq)))]
-
-           (cond
-
-             ;; new item to add, or channel was closed
-             (= ch from)
-             (when v
-               (let [k (f v)]
-                 (swap! channels
-                        (fn [channels]
-                          (let [ch (or (get channels k) (async/chan buf-size))]
-                            (async/put! ch v)
-                            (assoc channels k ch))))
-                 (recur channel-seq)))
-
-             ;; timeout
-             (not v)
-             (do (when (not-empty channel-seq)
-                   (swap! channels
-                          (fn [channels]
-                            (->> channels
-                                 (remove (comp (set channel-seq) second))
-                                 (into {})))))
-                 (recur (vals @channels)))
-
-             ;; we got a live one
-             :else (do (async/>! to v)
-                       (recur
-                        (if (> (count @channels) 1)
-                          (remove (partial = ch) (vals @channels))
-                          (vals @channels)))))))
-       (doseq [ch (vals @channels)]
+       (try (loop []
+              (when-let [v (async/<! from)]
+                (let [k (f v)]
+                  (swap! silos
+                         (fn [silos*]
+                           (let [ch (or (get silos* k) (async/chan buf-size))]
+                             (async/put! ch v)
+                             (assoc silos* k ch))))
+                  (recur))))
+            (catch Exception e
+              (println e)))
+       (doseq [ch (vals @silos)]
          (async/close! ch))
-       (async/close! to)))))
+       (async/close! stop-ch)
+       (async/close! to))
+
+     ;; read non-deterministically from 'silos', placing results on 'to' channel.
+     (async/go
+       (try (loop []
+              (let [[v ch] (async/alts!
+                            (vec
+                             (concat
+                              [stop-ch (async/timeout 100)]
+                              (vals @silos))))]
+                (when (not= ch stop-ch)
+                  (when (and v ch) (async/>! to v))
+                  (recur))))
+            (catch Exception e
+              (println e)))))))
 
 ;;; Private

@@ -98,39 +98,38 @@
   []
 
   (async/thread
-    (let [n 100
-          from (async/chan 10000)
-          to (async/chan)
+    (try (let [n 1000
+               from (async/chan (long (Math/pow 2 16)))
+               to (async/chan)
 
-          c (atom 0)
+               c (atom 0)
 
-          log-ch (logger)
+               log-ch (logger)
 
-          key-gen (fn [i] (rand-int 3))]
+               key-gen (fn [i] (< i (/ n 2)))]
 
-      ;; create an interval pipe with interval of 1s
-      (tidy/feeder-pipe from to first)
+           ;; create an interval pipe with interval of 1s
+           (tidy/feeder-pipe from to first n)
 
-      ;; dump messages onto from channel
-      (dotimes [i n]
-        (async/>!! from [(key-gen i) i]))
+           ;; dump messages onto from channel
+           (dotimes [i n]
+             (async/>!! from [(key-gen i) i]))
 
-      (dotimes [_ 1]
-        (async/go
+           (dotimes [_ 2]
+             (async/go
 
-          (try (loop []
-                 (when-let [v (async/<! to)]
-                   (async/>! log-ch v)
-                   (let [x (rand-int 100)]
-                     (dotimes [i x]
-                       (async/put! from [(key-gen i) i])))
-                   (when (= n (swap! c inc))
-                     (async/close! from)
-                     (async/close! to)
-                     (async/>! log-ch "test complete.")
-                     (async/close! log-ch))
-                   (recur)))
-               (catch Exception e
-                 (async/>! log-ch e)))))
+               (try (loop []
+                      (when-let [v (async/<! to)]
+                        (async/>! log-ch v)
+                        (if (= n (swap! c inc))
+                          (do (async/close! from)
+                              (async/close! to)
+                              (async/>! log-ch "test complete.")
+                              (async/close! log-ch)))
+                        (recur)))
+                    (catch Exception e
+                      (async/>! log-ch e)))))
 
-      )))
+           )
+         (catch Exception e
+           (println e)))))
