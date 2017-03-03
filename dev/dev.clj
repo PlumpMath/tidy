@@ -2,6 +2,18 @@
   (:require [tidy.core :as tidy]
             [clojure.core.async :as async]))
 
+(defn logger
+  []
+  (let [log-ch (async/chan)]
+    (async/go
+      (try (loop []
+             (when-let [msg (async/<! log-ch)]
+               (println msg)
+               (recur)))
+           (catch Exception e
+             (println e))))
+    log-ch))
+
 (defn interval-test
   []
   (async/thread
@@ -86,30 +98,39 @@
   []
 
   (async/thread
-    (let [n 10
-          from (async/chan)
+    (let [n 100
+          from (async/chan 10000)
           to (async/chan)
 
-          c (atom 0)]
+          c (atom 0)
+
+          log-ch (logger)
+
+          key-gen (fn [i] (rand-int 3))]
 
       ;; create an interval pipe with interval of 1s
       (tidy/feeder-pipe from to first)
 
       ;; dump messages onto from channel
       (dotimes [i n]
-        (async/put! from [i i]))
+        (async/>!! from [(key-gen i) i]))
 
-      (dotimes [_ 2]
+      (dotimes [_ 1]
         (async/go
 
-          (loop []
-            (when-let [v (async/<! to)]
-              (println v)
-              (async/<! (async/timeout 1000))
-              (when (= n (swap! c inc))
-                (async/close! from)
-                (async/close! to)
-                (println "test complete."))
-              (recur)))))
+          (try (loop []
+                 (when-let [v (async/<! to)]
+                   (async/>! log-ch v)
+                   (let [x (rand-int 100)]
+                     (dotimes [i x]
+                       (async/put! from [(key-gen i) i])))
+                   (when (= n (swap! c inc))
+                     (async/close! from)
+                     (async/close! to)
+                     (async/>! log-ch "test complete.")
+                     (async/close! log-ch))
+                   (recur)))
+               (catch Exception e
+                 (async/>! log-ch e)))))
 
       )))

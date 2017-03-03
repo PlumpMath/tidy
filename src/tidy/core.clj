@@ -83,40 +83,42 @@
   ([from to f] (feeder-pipe from to f 32))
   ([from to f buf-size]
    (let [channels (atom {})]
+
      (async/go
-       (loop []
-         (let [channel-seq (not-empty (vals @channels))
-               [v ch] (async/alts! (vec (cons from channel-seq)))]
+       (loop [channel-seq (vals @channels)]
+         (let [[v ch] (async/alts! (vec (concat [from (async/timeout 25)] channel-seq)))]
 
-           (when v
-             (if (= ch from)
+           (cond
 
-               ;; new value, into appropriate silo
+             ;; new item to add, or channel was closed
+             (= ch from)
+             (when v
                (let [k (f v)]
                  (swap! channels
                         (fn [channels]
                           (let [ch (or (get channels k) (async/chan buf-size))]
                             (async/put! ch v)
-                            (assoc channels k ch)))))
+                            (assoc channels k ch))))
+                 (recur channel-seq)))
 
-               ;; drain the top layer of all channels
-               (do (async/>! to v)
-                   (loop [channel-seq (remove (partial = ch) channel-seq)]
-                     (when (not-empty channel-seq)
-                       (let [[v ch] (async/alts!
-                                     (vec (cons
-                                           (async/timeout 50)
-                                           channel-seq)))]
-                         (if (and v ch)
-                           (do
-                             (async/>! to v)
-                             (recur (remove (partial = ch) channel-seq)))
-                           (swap! channels
-                                  (fn [channels]
-                                    (->> channels
-                                         (remove (comp (set channel-seq) second))
-                                         (into {}))))))))))
-             (recur))))
+             ;; timeout
+             (not v)
+             (do (when (not-empty channel-seq)
+                   (swap! channels
+                          (fn [channels]
+                            (->> channels
+                                 (remove (comp (set channel-seq) second))
+                                 (into {})))))
+                 (recur (vals @channels)))
+
+             ;; we got a live one
+             :else (do (async/>! to v)
+                       (recur
+                        (if (> (count @channels) 1)
+                          (remove (partial = ch) (vals @channels))
+                          (vals @channels)))))))
+       (doseq [ch (vals @channels)]
+         (async/close! ch))
        (async/close! to)))))
 
 ;;; Private
