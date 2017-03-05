@@ -1,6 +1,6 @@
-(defproject tomthought/tidy "0.2.2"
+(defproject tomthought/tidy "0.2.3"
   :description "Concurrency patterns using Clojure core.async."
-  :url "http://example.com/FIXME"
+  :url "https://github.com/tomthought/tidy"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"]

@@ -7,8 +7,14 @@
 ;;; Declarations
 
 (def ^:private default-interval-ms 1000)
+(def ^:private channel-type (type (async/chan)))
 
 ;;; API
+
+(defn channel?
+  "Returns true when 'x' is a core.async channel instance."
+  [x]
+  (instance? channel-type x))
 
 (defn interval-pipe
   "Places items from the 'from' channel onto the 'to' channel every
